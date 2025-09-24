@@ -1,6 +1,25 @@
+function findKV(env){
+  try {
+    if (!env) return null;
+    if (env.DAOHANG) return env.DAOHANG;
+    if (env.daohang) return env.daohang;
+    const prefer = ['KV','MY_KV','MYKV','KV_STORE','KVSTORE','DAOHANG','daohang'];
+    for (const n of prefer){
+      if (env[n] && typeof env[n].get === 'function' && typeof env[n].put === 'function') return env[n];
+    }
+    for (const k of Object.keys(env||{})){
+      try {
+        const v = env[k];
+        if (v && typeof v.get === 'function' && typeof v.put === 'function') return v;
+      } catch(e){}
+    }
+    return null;
+  } catch(e){ return null; }
+}
+
 export async function onRequestPost(context){
   const { request, env } = context;
-  const KV = env.DAOHANG || env.daohang;
+  const KV = findKV(env);
   try {
     // determine mode
     const sRaw = KV ? await KV.get('state') : null;
@@ -26,7 +45,7 @@ export async function onRequestPost(context){
       const cookies = Object.fromEntries(cookieHeader.split(';').map(p=>p.trim()).filter(Boolean).map(p=>p.split('=').map(x=>x.trim())));
       const token = cookies['NAV_SESSION'];
       if (!token) return new Response(JSON.stringify({ ok:false, msg:'未登录' }), { status:401, headers:{ 'Content-Type':'application/json' } });
-      const ok = KV ? await KV.get('session:'+token) : null;
+      const ok = KV ? await KV.get('session:'+token, { type: 'json' }) : null;
       if (!ok) return new Response(JSON.stringify({ ok:false, msg:'会话无效' }), { status:401, headers:{ 'Content-Type':'application/json' } });
     }
     const body = await request.json().catch(()=>null);

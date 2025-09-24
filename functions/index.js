@@ -1,6 +1,25 @@
+function findKV(env){
+  try {
+    if (!env) return null;
+    if (env.DAOHANG) return env.DAOHANG;
+    if (env.daohang) return env.daohang;
+    const prefer = ['KV','MY_KV','MYKV','KV_STORE','KVSTORE','DAOHANG','daohang'];
+    for (const n of prefer){
+      if (env[n] && typeof env[n].get === 'function' && typeof env[n].put === 'function') return env[n];
+    }
+    for (const k of Object.keys(env||{})){
+      try {
+        const v = env[k];
+        if (v && typeof v.get === 'function' && typeof v.put === 'function') return v;
+      } catch(e){}
+    }
+    return null;
+  } catch(e){ return null; }
+}
+
 export async function onRequest(context){
   const { request, env } = context;
-  const KV = env.DAOHANG || env.daohang;
+  const KV = findKV(env);
   try {
     const sRaw = KV ? await KV.get('state') : null;
     let mode = 'false';
@@ -20,16 +39,7 @@ export async function onRequest(context){
       else if (envVal === 'only') mode = 'only';
     } catch(e){}
     // if pages don't require auth, just serve assets
-    if (mode !== 'true') // 优先使用绑定的 ASSETS（Cloudflare Pages 风格），兼容性回退到全局 fetch
-    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      return await env.ASSETS.fetch(request);
-    }
-    // 回退：尝试全局 fetch（如果平台支持）
-    try {
-      return await fetch(request);
-    } catch (e) {
-      return new Response('Assets binding missing and global fetch failed', { status: 500 });
-    }
+    if (mode !== 'true') return await env.ASSETS.fetch(request);
 
     // otherwise require session cookie for any page access
     const cookieHeader = request.headers.get('cookie') || '';
@@ -44,7 +54,7 @@ export async function onRequest(context){
         </form>
       </body></html>`, { headers:{ 'Content-Type': 'text/html; charset=utf-8' }, status:401 });
     }
-    const ok = KV ? await KV.get('session:'+token) : null;
+    const ok = KV ? await KV.get('session:'+token, { type: 'json' }) : null;
     if (!ok){
       return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>登录</title></head><body>
         <h2>会话失效，请重新登录</h2>
@@ -54,16 +64,7 @@ export async function onRequest(context){
         </form>
       </body></html>`, { headers:{ 'Content-Type': 'text/html; charset=utf-8' }, status:401 });
     }
-    // 优先使用绑定的 ASSETS（Cloudflare Pages 风格），兼容性回退到全局 fetch
-    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      return await env.ASSETS.fetch(request);
-    }
-    // 回退：尝试全局 fetch（如果平台支持）
-    try {
-      return await fetch(request);
-    } catch (e) {
-      return new Response('Assets binding missing and global fetch failed', { status: 500 });
-    }
+    return await env.ASSETS.fetch(request);
   } catch (e){
     return new Response(String(e), { status:500 });
   }
