@@ -3,8 +3,8 @@
 /* eslint-disable */
 (async function(){
   // helper fetches
-  async function fetchState(){ const r = await fetch('/api/v1/state'); if (!r.ok) throw new Error('获取 state 失败: ' + r.status); return await r.json(); }
-  async function fetchMeta(){ const r = await fetch('/api/v1/meta'); if (!r.ok) return { authEnabled: 'false' }; return await r.json(); }
+  async function fetchState(){ const r = await fetch('/api/v1/state', { credentials: 'include', ...(/api/v1/state) }); if (!r.ok) throw new Error('获取 state 失败: ' + r.status); return await r.json(); }
+  async function fetchMeta(){ const r = await fetch('/api/v1/meta', { credentials: 'include', ...(/api/v1/meta) }); if (!r.ok) return { authEnabled: 'false' }; return await r.json(); }
 
   function escapeHtmlClient(s){ if (s==null) return ''; return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function escapeAttrClient(s){ if (s==null) return ''; return String(s).replace(/"/g,'&quot;'); }
@@ -323,7 +323,7 @@
   document.getElementById('loginSubmit').onclick = async ()=>{
     const pwd = document.getElementById('login_pwd').value;
     if (!pwd) { document.getElementById('loginMsg').textContent = '请输入密码'; return; }
-    const r = await fetch('/api/v1/login', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pwd })});
+    const r = await fetch('/api/v1/login', {headers: { 'Content-Type':'application/json' }, credentials: 'include', ...(/api/v1/login)})});
     const j = await r.json().catch(()=>({}));
     if (r.ok && j.ok){ document.getElementById('modalLogin').classList.remove('show'); document.body.classList.remove('modal-open'); alert('登录成功'); location.reload(); }
     else { document.getElementById('loginMsg').textContent = j?.msg || '登录失败'; }
@@ -737,7 +737,7 @@
   async function saveState(){
     if (!await requireEditAuth()) return;
     try {
-      const r = await fetch('/api/v1/save', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(state) });
+      const r = await fetch('/api/v1/save', {headers: { 'Content-Type':'application/json' }, credentials: 'include', ...(/api/v1/save)});
       if (r.ok) { alert('已保存'); return true; }
       else { const j = await r.json().catch(()=>({})); alert('保存失败: '+(j.msg||r.statusText)); return false; }
     } catch (e) {
@@ -749,7 +749,7 @@
   /* ---------------- 编辑鉴权 ---------------- */
   async function requireEditAuth(){
     try {
-      const r = await fetch('/api/v1/auth-check');
+      const r = await fetch('/api/v1/auth-check', { credentials: 'include', ...(/api/v1/auth-check) });
       if (!r.ok) return false;
       const j = await r.json().catch(()=>({}));
       if (j && j.authed) return true;
