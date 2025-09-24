@@ -17,6 +17,16 @@ function findKV(env){
   } catch(e){ return null; }
 }
 
+function makeCorsHeaders(request){
+  const headers = { 'Content-Type': 'application/json' };
+  try {
+    const origin = request.headers.get('origin') || request.headers.get('host') || '*';
+    // When credentials are used, Access-Control-Allow-Origin cannot be '*'
+    if (origin) headers['Access-Control-Allow-Origin'] = origin;
+    headers['Access-Control-Allow-Credentials'] = 'true';
+  } catch(e){}
+  return headers;
+}
 export async function onRequest(context){
   const { request, env } = context;
   const KV = findKV(env);
@@ -25,62 +35,40 @@ export async function onRequest(context){
     let mode = 'false';
     if (sRaw){
       try {
-        const st = JSON.parse(sRaw);
+        const st = typeof sRaw === 'string' ? JSON.parse(sRaw) : sRaw;
         const ra = st?.settings?.requireAuth;
         if (ra === true || String(ra) === 'true') mode = 'true';
         else if (String(ra) === 'only') mode = 'only';
       } catch(e){}
     }
-
-    // fallback: if KV didn't define requireAuth, check environment variable AUTH_ENABLED
+    // fallback to env var
     try {
       const envVal = String(env.AUTH_ENABLED || env.AUTH || '').trim().toLowerCase();
       if (envVal === 'true') mode = 'true';
       else if (envVal === 'only') mode = 'only';
     } catch(e){}
-    // if pages don't require auth, just serve assets
-    if (mode !== 'true') // 优先使用绑定的 ASSETS（Cloudflare Pages 风格），兼容性回退到全局 fetch
-    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      return await env.ASSETS.fetch(request);
+    if (mode !== 'true') {
+      if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') return await env.ASSETS.fetch(request);
+      try { return await fetch(request); } catch(e) { return new Response('Assets binding missing', { status:500 }); }
     }
-    try {
-      return await fetch(request);
-    } catch (e) {
-      return new Response('Assets binding missing and global fetch failed', { status: 500 });
-    }
-
-    // otherwise require session cookie for any page access
+    // require session for page access
     const cookieHeader = request.headers.get('cookie') || '';
     const cookies = Object.fromEntries(cookieHeader.split(';').map(p=>p.trim()).filter(Boolean).map(p=>p.split('=').map(x=>x.trim())));
     const token = cookies['NAV_SESSION'];
-    if (!token){
-      return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>登录</title></head><body>
-        <h2>站点需要登录</h2>
-        <form method="post" action="/api/v1/login">
-          <input name="password" placeholder="密码" />
-          <button type="submit">登录</button>
-        </form>
-      </body></html>`, { headers:{ 'Content-Type': 'text/html; charset=utf-8' }, status:401 });
+    if (!token) {
+      return new Response('需要登录', { status:401, headers: makeCorsHeaders(request) });
     }
-    const ok = KV ? await KV.get('session:'+token, { type: 'json' }) : null;
-    if (!ok){
-      return new Response(`<!doctype html><html><head><meta charset="utf-8"><title>登录</title></head><body>
-        <h2>会话失效，请重新登录</h2>
-        <form method="post" action="/api/v1/login">
-          <input name="password" placeholder="密码" />
-          <button type="submit">登录</button>
-        </form>
-      </body></html>`, { headers:{ 'Content-Type': 'text/html; charset=utf-8' }, status:401 });
+    let sess = null;
+    try { sess = KV ? await KV.get('session:'+token, { type: 'json' }) : null; } catch(e){}
+    if (!sess) {
+      try { sess = KV ? await KV.get('session:'+token, 'json') : null; } catch(e){}
     }
-    // 优先使用绑定的 ASSETS（Cloudflare Pages 风格），兼容性回退到全局 fetch
-    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
-      return await env.ASSETS.fetch(request);
+    if (!sess || !sess.exp || Number(sess.exp) < Date.now()){
+      try { if (KV) await KV.delete('session:'+token); } catch(e){}
+      return new Response('会话无效', { status:401, headers: makeCorsHeaders(request) });
     }
-    try {
-      return await fetch(request);
-    } catch (e) {
-      return new Response('Assets binding missing and global fetch failed', { status: 500 });
-    }
+    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') return await env.ASSETS.fetch(request);
+    try { return await fetch(request); } catch(e) { return new Response('Assets binding missing', { status:500 }); }
   } catch (e){
     return new Response(String(e), { status:500 });
   }

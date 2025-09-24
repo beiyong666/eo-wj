@@ -22,8 +22,8 @@ export async function onRequestGet(context){
   const KV = findKV(env);
   try {
     const ex = KV ? await KV.get('state') : null;
-    return new Response(JSON.stringify({ ok:true, kv_usable: !!KV, has_state: !!ex }), { headers:{ 'Content-Type':'application/json' }});
-  } catch (e){
-    return new Response(JSON.stringify({ ok:false, kv_usable:false, error: String(e) }), { status:500, headers:{ 'Content-Type':'application/json' }});
+    return new Response(JSON.stringify({ ok:true, kv_usable: !!KV, have_state: !!ex }), { headers:{ 'Content-Type':'application/json' } });
+  } catch (e) {
+    return new Response(JSON.stringify({ ok:false, kv_usable:false, error: String(e) }), { status:500, headers:{ 'Content-Type':'application/json' } });
   }
 }
