@@ -39,7 +39,15 @@ export async function onRequest(context){
       else if (envVal === 'only') mode = 'only';
     } catch(e){}
     // if pages don't require auth, just serve assets
-    if (mode !== 'true') return await env.ASSETS.fetch(request);
+    if (mode !== 'true') // 优先使用绑定的 ASSETS（Cloudflare Pages 风格），兼容性回退到全局 fetch
+    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+      return await env.ASSETS.fetch(request);
+    }
+    try {
+      return await fetch(request);
+    } catch (e) {
+      return new Response('Assets binding missing and global fetch failed', { status: 500 });
+    }
 
     // otherwise require session cookie for any page access
     const cookieHeader = request.headers.get('cookie') || '';
@@ -64,7 +72,15 @@ export async function onRequest(context){
         </form>
       </body></html>`, { headers:{ 'Content-Type': 'text/html; charset=utf-8' }, status:401 });
     }
-    return await env.ASSETS.fetch(request);
+    // 优先使用绑定的 ASSETS（Cloudflare Pages 风格），兼容性回退到全局 fetch
+    if (env && env.ASSETS && typeof env.ASSETS.fetch === 'function') {
+      return await env.ASSETS.fetch(request);
+    }
+    try {
+      return await fetch(request);
+    } catch (e) {
+      return new Response('Assets binding missing and global fetch failed', { status: 500 });
+    }
   } catch (e){
     return new Response(String(e), { status:500 });
   }
