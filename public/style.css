@@ -10,3 +10,7 @@ h1{margin-top:0}
 button{background:var(--accent);color:#fff;border:0;padding:8px 12px;border-radius:6px;cursor:pointer}
 button.secondary{background:#e2e8f0;color:#0f172a}
 small{color:#64748b}
+
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:9999}
+.modal-content{background:white;padding:20px;border-radius:8px;min-width:300px;box-shadow:0 6px 18px rgba(2,6,23,0.2)}

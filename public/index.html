@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EdgeOne Pages KV File Storage</title>
+  <title>EdgeOne KV 文件存储</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <main>
+  <main id="app" style="display:none">
     <h1>文件存储 (KV: wj)</h1>
 
     <section id="uploader">
@@ -21,6 +21,19 @@
       <div id="list"></div>
     </section>
   </main>
+
+  <!-- Password modal -->
+  <div id="pw-modal" class="modal">
+    <div class="modal-content">
+      <h2>请输入访问密码</h2>
+      <input id="pw-input" type="password" placeholder="密码" />
+      <div style="margin-top:12px">
+        <button id="pw-submit">进入</button>
+      </div>
+      <div id="pw-error" style="color:#b91c1c;margin-top:8px"></div>
+      <div style="margin-top:8px"><small>注：若控制台未设置 PASSWORD 环境变量则不需要密码。</small></div>
+    </div>
+  </div>
 
   <script src="/app.js"></script>
 </body>
