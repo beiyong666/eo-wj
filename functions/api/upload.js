@@ -1,42 +1,31 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  const headers = {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-  };
-
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers });
-  }
-
   // resolve KV binding: prefer env.wj, fallback to global wj
   const kv = (env && env.wj) ? env.wj : (typeof wj !== 'undefined' ? wj : null);
   if (!kv) {
-    return new Response(JSON.stringify({ error: 'KV binding \"wj\" not found. Bind your KV namespace as \"wj\".' }), { status: 500, headers });
+    return new Response(JSON.stringify({ error: 'KV binding "wj" not found. Bind your KV namespace as "wj".' }), { status: 500, headers: jsonHeaders() });
   }
 
   try {
     if (request.method !== 'POST') {
-      return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers });
+      return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405, headers: jsonHeaders() });
     }
 
     const contentType = request.headers.get('content-type') || '';
     if (!contentType.includes('multipart/form-data')) {
-      return new Response(JSON.stringify({ error: 'Content-Type must be multipart/form-data', got: contentType }), { status: 400, headers });
+      return new Response(JSON.stringify({ error: 'Content-Type must be multipart/form-data', got: contentType }), { status: 400, headers: jsonHeaders() });
     }
 
     let form;
     try {
       form = await request.formData();
     } catch (e) {
-      return new Response(JSON.stringify({ error: 'Failed to parse multipart/form-data', message: String(e) }), { status: 400, headers });
+      return new Response(JSON.stringify({ error: 'Failed to parse multipart/form-data', message: String(e) }), { status: 400, headers: jsonHeaders() });
     }
 
     const file = form.get('file');
     if (!file || typeof file === 'string') {
-      return new Response(JSON.stringify({ error: 'No file field found in form-data (field name must be \"file\")' }), { status: 400, headers });
+      return new Response(JSON.stringify({ error: 'No file field found in form-data (field name must be "file")' }), { status: 400, headers: jsonHeaders() });
     }
 
     const id = (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2,8);
@@ -47,7 +36,7 @@ export async function onRequest(context) {
     try {
       arrayBuffer = await file.arrayBuffer();
     } catch (e) {
-      return new Response(JSON.stringify({ error: 'Failed to read uploaded file as arrayBuffer', message: String(e) }), { status: 500, headers });
+      return new Response(JSON.stringify({ error: 'Failed to read uploaded file as arrayBuffer', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
     const uint8 = new Uint8Array(arrayBuffer);
     const size = uint8.byteLength;
@@ -65,14 +54,14 @@ export async function onRequest(context) {
     try {
       b64 = uint8ToBase64(uint8);
     } catch (e) {
-      return new Response(JSON.stringify({ error: 'Failed to convert file to base64', message: String(e) }), { status: 500, headers });
+      return new Response(JSON.stringify({ error: 'Failed to convert file to base64', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
 
     try {
       // store base64 string under file:<id>
       await kv.put('file:' + id, b64);
     } catch (e) {
-      return new Response(JSON.stringify({ error: 'KV put failed (file)', message: String(e) }), { status: 500, headers });
+      return new Response(JSON.stringify({ error: 'KV put failed (file)', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
 
     const meta = {
@@ -88,7 +77,7 @@ export async function onRequest(context) {
     } catch (e) {
       // attempt rollback
       try { await kv.delete('file:' + id); } catch(_) {}
-      return new Response(JSON.stringify({ error: 'KV put failed (meta)', message: String(e) }), { status: 500, headers });
+      return new Response(JSON.stringify({ error: 'KV put failed (meta)', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
 
     // update index
@@ -100,12 +89,21 @@ export async function onRequest(context) {
       if (index.length > 1000) index = index.slice(0, 1000);
       await kv.put(indexKey, JSON.stringify(index));
     } catch (e) {
-      return new Response(JSON.stringify({ id, warning: 'uploaded but index update failed', message: String(e) }), { status: 201, headers });
+      return new Response(JSON.stringify({ id, warning: 'uploaded but index update failed', message: String(e) }), { status: 201, headers: jsonHeaders() });
     }
 
-    return new Response(JSON.stringify({ id, filename, size }), { status: 201, headers });
+    return new Response(JSON.stringify({ id, filename, size }), { status: 201, headers: jsonHeaders() });
 
   } catch (err) {
-    return new Response(JSON.stringify({ error: 'Unhandled server error', message: String(err) }), { status: 500, headers });
+    return new Response(JSON.stringify({ error: 'Unhandled server error', message: String(err) }), { status: 500, headers: jsonHeaders() });
   }
+}
+
+function jsonHeaders() {
+  return {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+  };
 }
