@@ -1,6 +1,10 @@
-// functions/api/upload.js
 export async function onRequest(context) {
   const { request, env } = context;
+  // resolve KV binding: prefer env.wj, fallback to global wj
+  const kv = (env && env.wj) ? env.wj : (typeof wj !== 'undefined' ? wj : null);
+  if (!kv) {
+    return new Response(JSON.stringify({ error: 'KV binding "wj" not found. Bind your KV namespace as "wj".' }), { status: 500, headers: jsonHeaders() });
+  }
 
   try {
     if (request.method !== 'POST') {
@@ -8,17 +12,14 @@ export async function onRequest(context) {
     }
 
     const contentType = request.headers.get('content-type') || '';
-    // 防御性检查：确保 multipart 包含 boundary
     if (!contentType.includes('multipart/form-data')) {
       return new Response(JSON.stringify({ error: 'Content-Type must be multipart/form-data', got: contentType }), { status: 400, headers: jsonHeaders() });
     }
 
-    // 尝试解析 formData
     let form;
     try {
       form = await request.formData();
     } catch (e) {
-      // 返回详细错误以便排查（不要在生产暴露堆栈）
       return new Response(JSON.stringify({ error: 'Failed to parse multipart/form-data', message: String(e) }), { status: 400, headers: jsonHeaders() });
     }
 
@@ -27,7 +28,6 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ error: 'No file field found in form-data (field name must be "file")' }), { status: 400, headers: jsonHeaders() });
     }
 
-    // 生成 id 与读取内容
     const id = (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2,8);
     const filename = file.name || 'unknown';
     const contentTypeHeader = file.type || 'application/octet-stream';
@@ -38,15 +38,28 @@ export async function onRequest(context) {
     } catch (e) {
       return new Response(JSON.stringify({ error: 'Failed to read uploaded file as arrayBuffer', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
-
-    const size = arrayBuffer.byteLength;
-
-    // Some KV implementations like Cloudflare KV accept ArrayBuffer or Uint8Array.
-    // Convert to Uint8Array to be safe.
     const uint8 = new Uint8Array(arrayBuffer);
+    const size = uint8.byteLength;
+
+    // convert to base64 string to maximize compatibility with KV bindings that expect strings
+    function uint8ToBase64(u8) {
+      const CHUNK = 0x8000;
+      let parts = [];
+      for (let i=0; i<u8.length; i+=CHUNK) {
+        parts.push(String.fromCharCode.apply(null, u8.subarray(i, i+CHUNK)));
+      }
+      return btoa(parts.join(''));
+    }
+    let b64;
+    try {
+      b64 = uint8ToBase64(uint8);
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Failed to convert file to base64', message: String(e) }), { status: 500, headers: jsonHeaders() });
+    }
 
     try {
-      await env.wj.put('file:' + id, uint8);
+      // store base64 string under file:<id>
+      await kv.put('file:' + id, b64);
     } catch (e) {
       return new Response(JSON.stringify({ error: 'KV put failed (file)', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
@@ -60,30 +73,28 @@ export async function onRequest(context) {
     };
 
     try {
-      await env.wj.put('meta:' + id, JSON.stringify(meta));
+      await kv.put('meta:' + id, JSON.stringify(meta));
     } catch (e) {
-      // 尝试回滚文件键（忽略回滚错误）
-      try { await env.wj.delete('file:' + id); } catch(_) {}
+      // attempt rollback
+      try { await kv.delete('file:' + id); } catch(_) {}
       return new Response(JSON.stringify({ error: 'KV put failed (meta)', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
 
-    // 更新索引（尽量原子化简单实现）
+    // update index
     try {
       const indexKey = 'index';
-      let raw = await env.wj.get(indexKey);
+      let raw = await kv.get(indexKey);
       let index = raw ? JSON.parse(raw) : [];
       index.unshift(meta);
       if (index.length > 1000) index = index.slice(0, 1000);
-      await env.wj.put(indexKey, JSON.stringify(index));
+      await kv.put(indexKey, JSON.stringify(index));
     } catch (e) {
-      // index 更新失败不阻塞主要流程，但返回警告
       return new Response(JSON.stringify({ id, warning: 'uploaded but index update failed', message: String(e) }), { status: 201, headers: jsonHeaders() });
     }
 
     return new Response(JSON.stringify({ id, filename, size }), { status: 201, headers: jsonHeaders() });
 
   } catch (err) {
-    // 最后兜底：返回清晰的错误
     return new Response(JSON.stringify({ error: 'Unhandled server error', message: String(err) }), { status: 500, headers: jsonHeaders() });
   }
 }
