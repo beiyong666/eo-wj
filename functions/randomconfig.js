@@ -1,13 +1,11 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  
-const CORS_HEADERS = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-};
-
+  const CORS_HEADERS = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+  };
   if (request.method === 'OPTIONS') return new Response(null, { status:204, headers: CORS_HEADERS });
 
   const kv = (env && env.wj) ? env.wj : (typeof wj !== 'undefined' ? wj : null);

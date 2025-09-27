@@ -1,13 +1,11 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  
-const CORS_HEADERS = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-};
-
+  const CORS_HEADERS = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+  };
   if (request.method === 'OPTIONS') return new Response(null, { status:204, headers: CORS_HEADERS });
 
   const kv = (env && env.wj) ? env.wj : (typeof wj !== 'undefined' ? wj : null);
@@ -28,7 +26,13 @@ const CORS_HEADERS = {
       let result = { keys: [], cursor: null, list_complete: false };
       do {
         result = await kv.list({ prefix: 'file:' + prefix, cursor: result.cursor, limit: 1000 });
-        for (const k of result.keys) { if (k && k.name) { const realKey = k.name.substring(5); await kv.delete('file:' + realKey); await kv.delete('meta:' + realKey); } }
+        for (const k of result.keys) {
+          if (k && k.name) {
+            const realKey = k.name.substring(5);
+            await kv.delete('file:' + realKey);
+            await kv.delete('meta:' + realKey);
+          }
+        }
       } while (!result.list_complete);
     } else {
       await kv.delete('file:' + path);

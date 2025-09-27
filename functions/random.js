@@ -1,13 +1,11 @@
 export async function onRequest(context) {
   const { request, env } = context;
-  
-const CORS_HEADERS = {
-  'Content-Type': 'application/json; charset=utf-8',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-};
-
+  const CORS_HEADERS = {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type,Authorization'
+  };
   if (request.method === 'OPTIONS') return new Response(null, { status:204, headers: CORS_HEADERS });
 
   const kv = (env && env.wj) ? env.wj : (typeof wj !== 'undefined' ? wj : null);
@@ -28,7 +26,12 @@ const CORS_HEADERS = {
     const prefix = 'file:' + (dir.endsWith('/') ? dir : dir + '/');
     let result = { keys: [], cursor: null, list_complete: false };
     let keys = [];
-    do { result = await kv.list({ prefix, cursor: result.cursor, limit: 1000 }); for (const k of result.keys) { if (k && k.name && k.name.startsWith('file:')) keys.push(k.name.substring(5)); } } while (!result.list_complete);
+    do {
+      result = await kv.list({ prefix, cursor: result.cursor, limit: 1000 });
+      for (const k of result.keys) {
+        if (k && k.name && k.name.startsWith('file:')) keys.push(k.name.substring(5));
+      }
+    } while (!result.list_complete);
 
     const imgExts = ['.jpg','.jpeg','.png','.gif','.webp','.bmp','.svg'];
     const vidExts = ['.mp4','.webm','.ogg'];

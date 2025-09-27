@@ -25,5 +25,7 @@ export async function onRequest(context) {
     respHeaders.set('Content-Disposition', 'inline; filename="' + ((meta && meta.name) ? meta.name.replace(/["\\]/g,'') : path.replace(/["\\]/g,'')) + '"');
     respHeaders.set('Access-Control-Allow-Origin','*');
     return new Response(bytes.buffer, { headers: respHeaders });
-  } catch(e) { return new Response(JSON.stringify({ error: String(e) }), { status:500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin':'*' } }); }
+  } catch(e) {
+    return new Response(JSON.stringify({ error: String(e) }), { status:500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin':'*' } });
+  }
 }
