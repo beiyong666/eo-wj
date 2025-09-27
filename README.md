@@ -1,13 +1,6 @@
-# EdgeOne Pages + KV File Storage (kv name: `wj`)
+EdgeOne Pages + KV File Storage (repack2)
 
-This project stores uploaded files into KV as **base64 strings** for compatibility with KV bindings that accept strings.
-
-**Important**
-- Bind your KV namespace to the Functions environment with the binding name `wj`.
-- Binary files are stored under key `file:<id>` as base64 string.
-- Metadata under `meta:<id>` (JSON).
-- Index under `index` (JSON array).
-
-**Tradeoffs**
-- Base64 increases size by ~33%. Watch your KV size limits.
-
+- Functions are placed at `functions/` (EdgeOne may detect functions in this folder automatically).
+- Bind your KV namespace as `wj`.
+- Publish directory: public
+- Set optional env var PASSWORD to enable simple password protection.

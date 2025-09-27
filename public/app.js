@@ -1,146 +1,36 @@
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  async function jsonFetch(url, opts){ const res = await fetch(url, opts); const text = await res.text(); try { return { ok: res.ok, status: res.status, data: text ? JSON.parse(text) : null, raw: text }; } catch(e){ return { ok: res.ok, status: res.status, data: null, raw: text }; } }
 
-// --- Server-backed password gate ---
-// Flow: on load call /api/check-auth. If not authenticated show overlay.
-// On submit, POST /api/login with JSON { password }. If success, server sets HttpOnly cookie (1 hour).
-(async function(){
-  try{
-    const overlay = document.getElementById('pwOverlay');
-    const pwInput = overlay ? document.getElementById('pwInput') : null;
-    const pwSubmit = overlay ? document.getElementById('pwSubmit') : null;
+  const app = $('app'), modal = $('pw-modal'), pwInput = $('pw-input'), pwSubmit = $('pw-submit'), pwError = $('pw-error');
 
-    async function checkAuth(){
-      try{
-        const res = await fetch('/api/check-auth', { method: 'GET', credentials: 'same-origin' });
-        if(!res.ok) return false;
-        const j = await res.json();
-        return !!j.auth;
-      }catch(e){ return false; }
-    }
+  function showModal(){ modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); pwInput.focus(); }
+  function hideModal(){ modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); pwInput.value=''; pwError.textContent=''; }
+  function setAuthenticated(flag){ if(flag) localStorage.setItem('wj_auth_v1','1'); else localStorage.removeItem('wj_auth_v1'); }
+  function isAuthenticated(){ return localStorage.getItem('wj_auth_v1') === '1'; }
 
-    function showOverlay(){ if(overlay) overlay.style.display = 'flex'; }
-    function hideOverlay(){ if(overlay) overlay.style.display = 'none'; }
+  async function isProtected(){ try { const r = await jsonFetch('/api/check_password'); return r.ok && r.data && r.data.protected === true; } catch(e){ return false; } }
+  async function requireAuthFlow(){ const prot = await isProtected(); if(!prot){ app.style.display='block'; return true; } if(isAuthenticated()){ app.style.display='block'; return true; } showModal(); return false; }
 
-    const authed = await checkAuth();
-    if(!authed){
-      showOverlay();
-    } else {
-      hideOverlay();
-    }
+  pwSubmit.addEventListener('click', async ()=>{ pwError.textContent=''; const pw = pwInput.value || ''; pwSubmit.disabled = true; pwSubmit.textContent = '验证中...'; try{ const res = await jsonFetch('/api/check_password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) }); if(res.ok && res.data && res.data.ok){ setAuthenticated(true); hideModal(); app.style.display='block'; await refreshRandomConfig(); await refreshList(); } else { pwError.textContent = (res.data && res.data.error) ? res.data.error : ('验证失败 ' + res.status); } } catch(e){ pwError.textContent = '网络错误'; } finally { pwSubmit.disabled = false; pwSubmit.textContent = '进入'; } });
+  pwInput.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ e.preventDefault(); pwSubmit.click(); } });
 
-    if(pwSubmit){
-      pwSubmit.addEventListener('click', async ()=>{
-        const pwd = pwInput.value || '';
-        try{
-          const res = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: pwd }),
-            credentials: 'same-origin'
-          });
-          const j = await res.json();
-          if(res.ok && j.ok){
-            hideOverlay();
-          } else {
-            alert('密码错误');
-            pwInput.value = '';
-            pwInput.focus();
-          }
-        }catch(e){
-          alert('请求失败：' + e.message);
-        }
-      });
-      pwInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') pwSubmit.click(); });
-    }
-  }catch(e){
-    console.error('Server auth init error', e);
-  }
+  const uploadBtn = $('uploadBtn'), fileInput = $('fileInput'), dirInput = $('dirInput'), uploadStatus = $('uploadStatus');
+  uploadBtn.addEventListener('click', async ()=>{ if(!(await requireAuthFlow())){ alert('请先输入密码'); return; } if(!fileInput.files || fileInput.files.length===0){ alert('请选择文件'); return; } const file = fileInput.files[0]; const dir = (dirInput.value || '').trim(); const fd = new FormData(); fd.append('file', file, file.name); fd.append('dir', dir); uploadStatus.textContent = '上传中...'; try{ const res = await fetch('/api/upload', { method:'POST', body: fd }); const text = await res.text(); let data; try{ data = text ? JSON.parse(text) : null; }catch(e){ data=null; } if(!res.ok) { uploadStatus.textContent = '上传失败: ' + (data && data.error ? data.error : res.status); return; } uploadStatus.textContent = '上传成功: ' + (data && data.key ? data.key : ''); const downloadUrl = window.location.origin + '/api/download?path=' + encodeURIComponent(data.key); const copyBtn = document.createElement('button'); copyBtn.textContent='复制下载链接'; copyBtn.style.marginLeft='8px'; copyBtn.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(downloadUrl); copyBtn.textContent='已复制'; setTimeout(()=>copyBtn.textContent='复制下载链接',1500);}catch(e){ alert('复制失败: '+e); } }); uploadStatus.appendChild(copyBtn); fileInput.value=''; await refreshList(); } catch(e){ uploadStatus.textContent = '上传异常: '+String(e); } });
+
+  const listDirInput = $('listDirInput'), listBtn = $('listBtn'), listRootBtn = $('listRootBtn'), listDiv = $('list');
+  listBtn.addEventListener('click', ()=>{ refreshList(listDirInput.value || ''); }); listRootBtn.addEventListener('click', ()=>{ refreshList(''); });
+
+  async function refreshList(dir=''){ if(!(await requireAuthFlow())) return; listDiv.innerHTML = '加载中...'; try{ const q = dir ? '?dir=' + encodeURIComponent(dir) : ''; const r = await jsonFetch('/api/list' + q); if(!r.ok){ listDiv.innerHTML = '<div style="color:#b91c1c">加载失败: '+(r.raw||r.status)+'</div>'; return; } const files = (r.data && r.data.files) ? r.data.files : []; if(files.length===0){ listDiv.innerHTML = '<p><small>目录为空或不存在。</small></p>'; return; } listDiv.innerHTML = ''; files.forEach(item=>{ const el = document.createElement('div'); el.className='file-card'; el.innerHTML = '<div class="file-meta"><strong>'+escapeHtml(item.name)+'</strong><small>'+escapeHtml(String(item.size))+' bytes · '+escapeHtml(item.type || '')+'</small></div>'; const actions = document.createElement('div'); actions.className='actions'; const aDL = document.createElement('a'); aDL.href = item.url; aDL.download=''; const dlBtn = document.createElement('button'); dlBtn.textContent='下载'; aDL.appendChild(dlBtn); const delBtn = document.createElement('button'); delBtn.className='secondary'; delBtn.textContent='删除'; delBtn.addEventListener('click', async ()=>{ if(!confirm('确定删除此文件？')) return; const res = await jsonFetch('/api/delete', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ path: item.key, dir: false }) }); if(res.ok && res.data && res.data.ok){ await refreshList(dir); } else { alert('删除失败'); } }); const copyBtn = document.createElement('button'); copyBtn.className='secondary'; copyBtn.textContent='复制链接'; copyBtn.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(window.location.origin + '/api/download?path=' + encodeURIComponent(item.key)); copyBtn.textContent='已复制'; setTimeout(()=>copyBtn.textContent='复制链接',1500);}catch(e){ alert('复制失败: '+e); } }); actions.appendChild(aDL); actions.appendChild(delBtn); actions.appendChild(copyBtn); el.appendChild(actions); listDiv.appendChild(el); }); }catch(e){ listDiv.innerHTML = '<div style="color:#b91c1c">加载异常: '+String(e)+'</div>'; } }
+
+  const randomDirInput = $('randomDirInput'), addRandomDirBtn = $('addRandomDirBtn'), randomDirsList = $('randomDirsList'), refreshRandomConfigBtn = $('refreshRandomConfigBtn');
+  addRandomDirBtn.addEventListener('click', async ()=>{ const d = (randomDirInput.value || '').trim(); if(!d) return alert('请输入目录'); const res = await jsonFetch('/api/randomconfig', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ dir: d }) }); if(res.ok && res.data){ randomDirInput.value=''; await refreshRandomConfig(); } else { alert('添加失败'); } });
+  refreshRandomConfigBtn.addEventListener('click', refreshRandomConfig);
+  async function refreshRandomConfig(){ const r = await jsonFetch('/api/randomconfig'); randomDirsList.innerHTML = ''; if(r.ok && r.data && Array.isArray(r.data.dirs)){ r.data.dirs.forEach(d=>{ const item = document.createElement('div'); item.className='dir-item'; item.innerHTML = '<div>'+escapeHtml(d)+'</div>'; const remove = document.createElement('button'); remove.className='secondary'; remove.textContent='移除'; remove.addEventListener('click', async ()=>{ const res = await jsonFetch('/api/randomconfig?dir='+encodeURIComponent(d), { method:'DELETE' }); if(res.ok && res.data){ await refreshRandomConfig(); } else alert('移除失败'); }); item.appendChild(remove); randomDirsList.appendChild(item); }); } else { randomDirsList.innerHTML = '<small>暂无开放目录</small>'; } }
+
+  const randomDirTest = $('randomDirTest'), randomType = $('randomType'), randomBtn = $('randomBtn'), randomResult = $('randomResult');
+  randomBtn.addEventListener('click', async ()=>{ const d = (randomDirTest.value || '').trim(); const t = randomType.value; if(!d) return alert('请输入目录'); randomResult.innerHTML = '请求中...'; const r = await jsonFetch('/api/random?dir=' + encodeURIComponent(d) + '&type=' + encodeURIComponent(t)); if(!r.ok || !r.data || !r.data.url){ randomResult.innerHTML = '<div style="color:#b91c1c">错误: ' + (r.raw || r.status) + '</div>'; return; } const url = r.data.url; if(t === 'img'){ randomResult.innerHTML = '<img src="' + url + '" alt="random image" />'; } else { randomResult.innerHTML = '<video src="' + url + '" controls></video>'; } });
+
+  (async ()=>{ const ok = await requireAuthFlow(); if(ok){ await refreshRandomConfig(); await refreshList(''); } })();
 })();
-// --- end server-backed password gate ---
-
-
-
-
-
-
-async function api(path, opts){ const res = await fetch(path, opts); if (!res.ok) throw new Error('网络错误 ' + res.status); return res.json(); }
-
-async function refreshList(){
-  const listDiv = document.getElementById('list');
-  listDiv.innerHTML = '加载中...';
-  try{
-    const data = await api('/api/list');
-    if(!Array.isArray(data)) throw new Error('Invalid list');
-    if(data.length === 0) listDiv.innerHTML = '<p><small>还没有文件。</small></p>';
-    else {
-      listDiv.innerHTML = '';
-      data.forEach(item => {
-        const el = document.createElement('div');
-        el.className = 'file-card';
-        el.innerHTML = `
-          <div class="file-meta">
-            <strong>${escapeHtml(item.filename)}</strong>
-            <small>${item.size} bytes · ${new Date(item.createdAt).toLocaleString()}</small>
-          </div>
-          <div class="actions">
-            <a href="/api/download?id=${encodeURIComponent(item.id)}" download>
-              <button>下载</button>
-            </a>
-            <button class="secondary" data-id="${item.id}">删除</button>
-          </div>
-        `;
-        listDiv.appendChild(el);
-      });
-      // attach delete handlers
-      listDiv.querySelectorAll('button.secondary').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const id = btn.getAttribute('data-id');
-          if(!confirm('确定删除此文件？')) return;
-          try{
-            await api('/api/delete', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id }) });
-            await refreshList();
-          }catch(err){ alert('删除失败: ' + err.message); }
-        });
-      });
-    }
-  }catch(err){
-    listDiv.innerHTML = '<p style="color:#b91c1c">加载失败: ' + err.message + '</p>';
-  }
-}
-
-function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-document.getElementById('uploadBtn').addEventListener('click', async () => {
-  const fileEl = document.getElementById('fileInput');
-  const status = document.getElementById('uploadStatus');
-  if(!fileEl.files || fileEl.files.length === 0){ alert('请选择文件'); return; }
-  const file = fileEl.files[0];
-  const fd = new FormData();
-  fd.append('file', file, file.name);
-  status.textContent = '上传中...';
-  try{
-    const res = await fetch('/api/upload', { method:'POST', body: fd });
-    const data = await res.json();
-    if(!res.ok) throw new Error(data?.error || JSON.stringify(data));
-    status.textContent = '上传成功: ' + data.id;
-    // show copy link UI if available
-    if(data.downloadUrl){
-      let existing = document.getElementById('downloadLinkBox');
-      if(existing) existing.remove();
-      const box = document.createElement('div');
-      box.id = 'downloadLinkBox';
-      box.style.marginTop = '8px';
-      box.innerHTML = `<input id="downloadUrlInput" style="width:70%" readonly value="${data.downloadUrl}" /><button id="copyDlBtn">复制下载链接</button>`;
-      status.parentNode.appendChild(box);
-      document.getElementById('copyDlBtn').addEventListener('click', async ()=>{
-        try{ await navigator.clipboard.writeText(data.downloadUrl); alert('已复制到剪贴板'); }catch(e){ window.prompt('复制链接，手动复制:', data.downloadUrl); }
-      });
-    }
-
-    fileEl.value = '';
-    await refreshList();
-  }catch(err){
-    status.textContent = '上传失败: ' + err.message;
-  }
-});
-
-window.addEventListener('load', refreshList);

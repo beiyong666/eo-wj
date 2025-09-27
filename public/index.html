@@ -1,27 +1,66 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EdgeOne Pages KV File Storage</title>
+  <title>文件存储（EdgeOne KV — wj）</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>\n  <!-- Password overlay -->\n  <div id="pwOverlay" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:9999">\n    <div style="background:#fff;padding:20px;border-radius:8px;max-width:400px;width:90%;box-shadow:0 4px 18px rgba(0,0,0,0.25)">\n      <h3 style="margin-top:0">请输入访问密码</h3>\n      <input id="pwInput" type="password" placeholder="密码" style="width:100%;padding:8px;margin-bottom:10px">\n      <div style="text-align:right">\n        <button id="pwSubmit">进入</button>\n      </div>\n      <p style="font-size:12px;color:#666;margin-top:8px">密码将记住 1 小时。</p>\n    </div>\n  </div>
-  <main>
+<body>
+  <main id="app" style="display:none">
     <h1>文件存储 (KV: wj)</h1>
 
-    <section id="uploader">
-      <input id="fileInput" type="file" />
-      <button id="uploadBtn">上传</button>
-      <div id="uploadStatus"></div>
+    <section id="auth-section">
+      <p><strong>说明：</strong>如果服务端设置了 <code>PASSWORD</code> 环境变量，访问需要先输入密码。</p>
+      <div id="upload-area">
+        <label>上传目标目录 (支持子目录，例如 <code>img/cover</code>)</label><br/>
+        <input id="dirInput" placeholder="不填表示根目录" />
+        <input id="fileInput" type="file" />
+        <button id="uploadBtn">上传</button>
+        <span id="uploadStatus"></span>
+      </div>
+      <hr/>
+      <div id="controls">
+        <input id="listDirInput" placeholder="输入目录查看，例如 img/cover" />
+        <button id="listBtn">查看目录</button>
+        <button id="listRootBtn">查看根目录</button>
+        <button id="refreshRandomConfigBtn">刷新可随机目录</button>
+      </div>
+      <div id="random-config-ui" style="margin-top:8px">
+        <h3>随机图开放目录管理</h3>
+        <input id="randomDirInput" placeholder="添加可随机访问的目录，例如 img/cover" />
+        <button id="addRandomDirBtn">添加</button>
+        <div id="randomDirsList"></div>
+      </div>
+      <hr/>
+      <div id="random-area">
+        <h3>随机图测试</h3>
+        <input id="randomDirTest" placeholder="目录，例如 img/cover" />
+        <select id="randomType"><option value="img">图片</option><option value="video">视频</option></select>
+        <button id="randomBtn">获取随机文件</button>
+        <div id="randomResult"></div>
+      </div>
     </section>
 
-    <section id="files">
-      <h2>已上传文件</h2>
+    <section id="files" style="margin-top:18px">
+      <h2>文件列表</h2>
       <div id="list"></div>
     </section>
   </main>
 
-  <script src="/config.js"></script>\n  <script src="/app.js"></script>
+  <!-- Password modal -->
+  <div id="pw-modal" class="modal" aria-hidden="true">
+    <div class="modal-content" role="dialog" aria-modal="true">
+      <h2>请输入访问密码</h2>
+      <input id="pw-input" type="password" placeholder="密码" />
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <button id="pw-submit">进入</button>
+      </div>
+      <div id="pw-error" style="color:#b91c1c;margin-top:8px"></div>
+      <div style="margin-top:8px"><small>注：若控制台未设置 PASSWORD 环境变量则不需要密码。</small></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
 </body>
 </html>
