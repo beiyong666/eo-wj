@@ -6,22 +6,33 @@
   <title>EdgeOne Pages KV File Storage</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>\n  <!-- Password overlay -->\n  <div id="pwOverlay" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:9999">\n    <div style="background:#fff;padding:20px;border-radius:8px;max-width:400px;width:90%;box-shadow:0 4px 18px rgba(0,0,0,0.25)">\n      <h3 style="margin-top:0">请输入访问密码</h3>\n      <input id="pwInput" type="password" placeholder="密码" style="width:100%;padding:8px;margin-bottom:10px">\n      <div style="text-align:right">\n        <button id="pwSubmit">进入</button>\n      </div>\n      <p style="font-size:12px;color:#666;margin-top:8px">密码将记住 1 小时。</p>\n    </div>\n  </div>
+<body>
+  <!-- Password overlay -->
+  <div id="pwOverlay" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:9999">
+    <div style="background:#fff;padding:20px;border-radius:8px;max-width:400px;width:90%;box-shadow:0 4px 18px rgba(0,0,0,0.25)">
+      <h3 style="margin-top:0">请输入访问密码</h3>
+      <input id="pwInput" type="password" placeholder="密码" style="width:100%;padding:8px;margin-bottom:10px">
+      <div style="text-align:right">
+        <button id="pwSubmit">进入</button>
+      </div>
+      <p style="font-size:12px;color:#666;margin-top:8px">密码将记住 1 小时。</p>
+    </div>
+  </div>
   <main>
     <h1>文件存储 (KV: wj)</h1>
 
-    <section id="uploader">
+    <section id="uploader">\n      <input id="dirInput" type="text" placeholder="上传到目录 (例如 img/cover)" style="width:60%;margin-right:8px" />
       <input id="fileInput" type="file" />
       <button id="uploadBtn">上传</button>
       <div id="uploadStatus"></div>
     </section>
 
-    <section id="files">
+    <section id="dirsPanel">\n      <h2>目录</h2>\n      <div id="dirs" style="margin-bottom:12px"></div>\n    </section>\n\n    <section id="files">
       <h2>已上传文件</h2>
       <div id="list"></div>
     </section>
   </main>
 
-  <script src="/config.js"></script>\n  <script src="/app.js"></script>
+    <script src="/app.js"></script>
 </body>
 </html>

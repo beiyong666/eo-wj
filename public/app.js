@@ -76,6 +76,7 @@ async function refreshList(){
       data.forEach(item => {
         const el = document.createElement('div');
         el.className = 'file-card';
+        el.dataset.dir = item.dir || '';
         el.innerHTML = `
           <div class="file-meta">
             <strong>${escapeHtml(item.filename)}</strong>
@@ -114,8 +115,10 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
   const status = document.getElementById('uploadStatus');
   if(!fileEl.files || fileEl.files.length === 0){ alert('请选择文件'); return; }
   const file = fileEl.files[0];
+  const dirVal = (document.getElementById('dirInput').value || '').trim().replace(/^\/+|\/+$/g, '');
   const fd = new FormData();
   fd.append('file', file, file.name);
+  fd.append('dir', dirVal);
   status.textContent = '上传中...';
   try{
     const res = await fetch('/api/upload', { method:'POST', body: fd });
@@ -143,4 +146,43 @@ document.getElementById('uploadBtn').addEventListener('click', async () => {
   }
 });
 
-window.addEventListener('load', refreshList);
+window.addEventListener('load', () => { refreshList(); loadDirs(); });
+
+async function loadDirs(){
+  try{
+    const res = await fetch('/api/dirs');
+    if(!res.ok) return;
+    const dirs = await res.json();
+    const div = document.getElementById('dirs');
+    div.innerHTML = '';
+    dirs.forEach(d => {
+      const b = document.createElement('button');
+      b.textContent = d;
+      b.style.marginRight = '8px';
+      b.addEventListener('click', ()=>{ filterByDir(d); });
+      const del = document.createElement('button');
+      del.textContent = '删除';
+      del.style.marginLeft = '4px';
+      del.addEventListener('click', async ()=>{
+        if(!confirm('确认删除目录 ' + d + ' 及其所有文件吗？')) return;
+        const r = await fetch('/api/delete-dir', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({dir: d}) });
+        if(r.ok) { alert('删除成功'); await refreshList(); await loadDirs(); } else { alert('删除失败'); }
+      });
+      const container = document.createElement('span');
+      container.style.display='inline-block';
+      container.style.margin='6px 6px 6px 0';
+      container.appendChild(b);
+      container.appendChild(del);
+      div.appendChild(container);
+    });
+  }catch(e){ console.error('loadDirs', e); }
+}
+
+function filterByDir(dir){
+  const listDiv = document.getElementById('list');
+  const cards = listDiv.querySelectorAll('.file-card');
+  cards.forEach(c=>{ if(c.dataset.dir && (c.dataset.dir === dir || c.dataset.dir.startsWith(dir + '/'))) c.style.display='block'; else c.style.display='none'; });
+  // scroll to list
+  window.scrollTo({ top: listDiv.offsetTop, behavior: 'smooth' });
+}
+
