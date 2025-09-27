@@ -92,7 +92,8 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ id, warning: 'uploaded but index update failed', message: String(e) }), { status: 201, headers: jsonHeaders() });
     }
 
-    return new Response(JSON.stringify({ id, filename, size }), { status: 201, headers: jsonHeaders() });
+    const downloadUrl = new URL('/api/download?id=' + id, request.url).toString();
+    return new Response(JSON.stringify({ id, filename, size, downloadUrl }), { status: 201, headers: jsonHeaders() });
 
   } catch (err) {
     return new Response(JSON.stringify({ error: 'Unhandled server error', message: String(err) }), { status: 500, headers: jsonHeaders() });
