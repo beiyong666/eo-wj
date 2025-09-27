@@ -1,108 +1,146 @@
 
-(function(){
-  function $(id){ return document.getElementById(id); }
-  function safeParse(text){
-    try { return text ? JSON.parse(text) : null; } catch(e){ return null; }
-  }
-  async function fetchJson(url, opts){
-    try {
-      const res = await fetch(url, opts);
-      const text = await res.text();
-      const data = safeParse(text);
-      return { ok: res.ok, status: res.status, data, raw: text };
-    } catch(e){
-      return { ok:false, status:0, data:null, error: String(e) };
+// --- Server-backed password gate ---
+// Flow: on load call /api/check-auth. If not authenticated show overlay.
+// On submit, POST /api/login with JSON { password }. If success, server sets HttpOnly cookie (1 hour).
+(async function(){
+  try{
+    const overlay = document.getElementById('pwOverlay');
+    const pwInput = overlay ? document.getElementById('pwInput') : null;
+    const pwSubmit = overlay ? document.getElementById('pwSubmit') : null;
+
+    async function checkAuth(){
+      try{
+        const res = await fetch('/api/check-auth', { method: 'GET', credentials: 'same-origin' });
+        if(!res.ok) return false;
+        const j = await res.json();
+        return !!j.auth;
+      }catch(e){ return false; }
     }
-  }
 
-  const app = $('app'), modal = $('pw-modal'), pwInput = $('pw-input'), pwSubmit = $('pw-submit'), pwError = $('pw-error');
+    function showOverlay(){ if(overlay) overlay.style.display = 'flex'; }
+    function hideOverlay(){ if(overlay) overlay.style.display = 'none'; }
 
-  function showModal(){ modal.classList.add('show'); modal.setAttribute('aria-hidden','false'); pwInput.focus(); document.body.style.overflow='hidden'; }
-  function hideModal(){ modal.classList.remove('show'); modal.setAttribute('aria-hidden','true'); pwInput.value=''; pwError.textContent=''; document.body.style.overflow='auto'; }
-
-  function setAuthenticated(flag){ if(flag) localStorage.setItem('wj_auth_v1','1'); else localStorage.removeItem('wj_auth_v1'); }
-  function isAuthenticated(){ return localStorage.getItem('wj_auth_v1') === '1'; }
-
-  async function checkProtected(){
-    const r = await fetchJson('/api/check_password');
-    if(!r.ok) return false;
-    if(r.data && typeof r.data.protected !== 'undefined') return !!r.data.protected;
-    return false;
-  }
-
-  async function requireAuthFlow(){
-    const prot = await checkProtected();
-    if(!prot){ app.style.display='block'; return true; }
-    if(isAuthenticated()){ app.style.display='block'; hideModal(); return true; }
-    showModal(); return false;
-  }
-
-  pwSubmit.addEventListener('click', async ()=>{
-    pwError.textContent = '';
-    const pw = pwInput.value || '';
-    pwSubmit.disabled = true; pwSubmit.textContent = '验证中...';
-    try {
-      const r = await fetchJson('/api/check_password', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ password: pw }) });
-      // Accept case: HTTP 200 and data.ok === true OR server returns 200 with protected=false note
-      if(r.ok && r.data && (r.data.ok === true || r.data.note)){ setAuthenticated(true); hideModal(); app.style.display='block'; await refreshList(''); }
-      else {
-        // if server returned 401 or ok=false show reason
-        const msg = (r.data && r.data.error) ? r.data.error : ('HTTP ' + r.status);
-        pwError.textContent = msg;
-        console.warn('login failed', r);
-      }
-    } catch(e){
-      pwError.textContent = '网络错误';
-      console.error(e);
-    } finally {
-      pwSubmit.disabled = false; pwSubmit.textContent = '进入';
+    const authed = await checkAuth();
+    if(!authed){
+      showOverlay();
+    } else {
+      hideOverlay();
     }
-  });
 
-  pwInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); pwSubmit.click(); } });
-
-  // Minimal list and upload to verify flow after login
-  const uploadBtn = $('uploadBtn'), fileInput = $('fileInput'), dirInput = $('dirInput'), uploadStatus = $('uploadStatus'), listDiv = $('list');
-  uploadBtn.addEventListener('click', async ()=>{
-    if(!(await requireAuthFlow())){ alert('请先输入密码'); return; }
-    if(!fileInput.files.length){ alert('请选择文件'); return; }
-    const file = fileInput.files[0]; const dir = (dirInput.value || '').trim();
-    const fd = new FormData(); fd.append('file', file); fd.append('dir', dir);
-    uploadStatus.textContent = '上传中...';
-    try {
-      const res = await fetch('/api/upload', { method:'POST', body: fd });
-      const text = await res.text(); const data = safeParse(text);
-      if(res.ok && data && data.ok){ uploadStatus.textContent = '上传成功'; await refreshList(dir); } else uploadStatus.textContent = '上传失败';
-    } catch(e){ uploadStatus.textContent = '上传异常'; }
-  });
-
-  async function refreshList(dir=''){
-    if(!(await requireAuthFlow())) return;
-    listDiv.innerHTML = '加载中...';
-    try {
-      const q = dir ? '?dir=' + encodeURIComponent(dir) : '';
-      const r = await fetchJson('/api/list' + q);
-      if(!r.ok){ listDiv.innerHTML = '加载失败'; return; }
-      const files = (r.data && r.data.files) ? r.data.files : [];
-      if(files.length === 0){ listDiv.innerHTML = '<small>无文件</small>'; return; }
-      listDiv.innerHTML = '';
-      for(const f of files){
-        const el = document.createElement('div');
-        el.textContent = f.name + '  (' + f.size + ' bytes) ';
-        const a = document.createElement('a'); a.href = f.url; a.textContent = ' 下载'; a.target='_blank';
-        el.appendChild(a);
-        listDiv.appendChild(el);
-      }
-    } catch(e){ listDiv.innerHTML = '加载异常'; }
-  }
-
-  (async ()=>{
-    // try to use local auth if present
-    if(isAuthenticated()){
-      try { const r = await fetchJson('/api/check_password'); if(r.ok && r.data && r.data.protected !== true){ setAuthenticated(false); } else { app.style.display='block'; hideModal(); await refreshList(''); return; } } catch(e){ /* network */ }
+    if(pwSubmit){
+      pwSubmit.addEventListener('click', async ()=>{
+        const pwd = pwInput.value || '';
+        try{
+          const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd }),
+            credentials: 'same-origin'
+          });
+          const j = await res.json();
+          if(res.ok && j.ok){
+            hideOverlay();
+          } else {
+            alert('密码错误');
+            pwInput.value = '';
+            pwInput.focus();
+          }
+        }catch(e){
+          alert('请求失败：' + e.message);
+        }
+      });
+      pwInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') pwSubmit.click(); });
     }
-    const ok = await requireAuthFlow();
-    if(ok){ await refreshList(''); }
-  })();
-
+  }catch(e){
+    console.error('Server auth init error', e);
+  }
 })();
+// --- end server-backed password gate ---
+
+
+
+
+
+
+async function api(path, opts){ const res = await fetch(path, opts); if (!res.ok) throw new Error('网络错误 ' + res.status); return res.json(); }
+
+async function refreshList(){
+  const listDiv = document.getElementById('list');
+  listDiv.innerHTML = '加载中...';
+  try{
+    const data = await api('/api/list');
+    if(!Array.isArray(data)) throw new Error('Invalid list');
+    if(data.length === 0) listDiv.innerHTML = '<p><small>还没有文件。</small></p>';
+    else {
+      listDiv.innerHTML = '';
+      data.forEach(item => {
+        const el = document.createElement('div');
+        el.className = 'file-card';
+        el.innerHTML = `
+          <div class="file-meta">
+            <strong>${escapeHtml(item.filename)}</strong>
+            <small>${item.size} bytes · ${new Date(item.createdAt).toLocaleString()}</small>
+          </div>
+          <div class="actions">
+            <a href="/api/download?id=${encodeURIComponent(item.id)}" download>
+              <button>下载</button>
+            </a>
+            <button class="secondary" data-id="${item.id}">删除</button>
+          </div>
+        `;
+        listDiv.appendChild(el);
+      });
+      // attach delete handlers
+      listDiv.querySelectorAll('button.secondary').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const id = btn.getAttribute('data-id');
+          if(!confirm('确定删除此文件？')) return;
+          try{
+            await api('/api/delete', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ id }) });
+            await refreshList();
+          }catch(err){ alert('删除失败: ' + err.message); }
+        });
+      });
+    }
+  }catch(err){
+    listDiv.innerHTML = '<p style="color:#b91c1c">加载失败: ' + err.message + '</p>';
+  }
+}
+
+function escapeHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('uploadBtn').addEventListener('click', async () => {
+  const fileEl = document.getElementById('fileInput');
+  const status = document.getElementById('uploadStatus');
+  if(!fileEl.files || fileEl.files.length === 0){ alert('请选择文件'); return; }
+  const file = fileEl.files[0];
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  status.textContent = '上传中...';
+  try{
+    const res = await fetch('/api/upload', { method:'POST', body: fd });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data?.error || JSON.stringify(data));
+    status.textContent = '上传成功: ' + data.id;
+    // show copy link UI if available
+    if(data.downloadUrl){
+      let existing = document.getElementById('downloadLinkBox');
+      if(existing) existing.remove();
+      const box = document.createElement('div');
+      box.id = 'downloadLinkBox';
+      box.style.marginTop = '8px';
+      box.innerHTML = `<input id="downloadUrlInput" style="width:70%" readonly value="${data.downloadUrl}" /><button id="copyDlBtn">复制下载链接</button>`;
+      status.parentNode.appendChild(box);
+      document.getElementById('copyDlBtn').addEventListener('click', async ()=>{
+        try{ await navigator.clipboard.writeText(data.downloadUrl); alert('已复制到剪贴板'); }catch(e){ window.prompt('复制链接，手动复制:', data.downloadUrl); }
+      });
+    }
+
+    fileEl.value = '';
+    await refreshList();
+  }catch(err){
+    status.textContent = '上传失败: ' + err.message;
+  }
+});
+
+window.addEventListener('load', refreshList);

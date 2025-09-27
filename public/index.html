@@ -1,51 +1,27 @@
 <!doctype html>
-<html lang="zh">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>文件存储（KV: wj）— 修复版</title>
+  <title>EdgeOne Pages KV File Storage</title>
   <link rel="stylesheet" href="/style.css">
 </head>
-<body>
-  <main id="app" style="display:none">
+<body>\n  <!-- Password overlay -->\n  <div id="pwOverlay" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:9999">\n    <div style="background:#fff;padding:20px;border-radius:8px;max-width:400px;width:90%;box-shadow:0 4px 18px rgba(0,0,0,0.25)">\n      <h3 style="margin-top:0">请输入访问密码</h3>\n      <input id="pwInput" type="password" placeholder="密码" style="width:100%;padding:8px;margin-bottom:10px">\n      <div style="text-align:right">\n        <button id="pwSubmit">进入</button>\n      </div>\n      <p style="font-size:12px;color:#666;margin-top:8px">密码将记住 1 小时。</p>\n    </div>\n  </div>
+  <main>
     <h1>文件存储 (KV: wj)</h1>
 
-    <section id="auth-section">
-      <p><strong>说明：</strong>如果服务端设置了 <code>PASSWORD</code> 环境变量，访问需要先输入密码。</p>
-      <div id="upload-area">
-        <label>上传目标目录 (支持子目录，例如 <code>img/cover</code>)</label><br/>
-        <input id="dirInput" placeholder="不填表示根目录" />
-        <input id="fileInput" type="file" />
-        <button id="uploadBtn">上传</button>
-        <span id="uploadStatus"></span>
-      </div>
-      <hr/>
-      <div id="controls">
-        <input id="listDirInput" placeholder="输入目录查看，例如 img/cover" />
-        <button id="listBtn">查看目录</button>
-        <button id="listRootBtn">查看根目录</button>
-      </div>
+    <section id="uploader">
+      <input id="fileInput" type="file" />
+      <button id="uploadBtn">上传</button>
+      <div id="uploadStatus"></div>
     </section>
 
-    <section id="files" style="margin-top:18px">
-      <h2>文件列表</h2>
+    <section id="files">
+      <h2>已上传文件</h2>
       <div id="list"></div>
     </section>
   </main>
 
-  <!-- Password modal -->
-  <div id="pw-modal" class="modal" aria-hidden="true">
-    <div class="modal-content" role="dialog" aria-modal="true">
-      <h2>请输入访问密码</h2>
-      <input id="pw-input" type="password" placeholder="密码" />
-      <div style="margin-top:12px;display:flex;gap:8px">
-        <button id="pw-submit">进入</button>
-      </div>
-      <div id="pw-error" style="color:#b91c1c;margin-top:8px"></div>
-      <div style="margin-top:8px"><small>注：若控制台未设置 PASSWORD 环境变量则不需要密码。</small></div>
-    </div>
-  </div>
-
-  <script src="/app.js"></script>
+  <script src="/config.js"></script>\n  <script src="/app.js"></script>
 </body>
 </html>

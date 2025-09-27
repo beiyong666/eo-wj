@@ -1,16 +1,13 @@
-EdgeOne Pages + KV File Storage (fixed)
+# EdgeOne Pages + KV File Storage (kv name: `wj`)
 
-- Functions are at functions/ root.
-- Bind KV namespace to variable name: wj
-- Publish directory: public
-- Endpoints available (after deployment):
-  - GET/POST /api/check_password
-  - POST /api/upload
-  - GET /api/list?dir=...
-  - GET /api/download?path=...
-  - POST /api/delete
-  - GET/POST/DELETE /api/randomconfig
-  - GET /api/random?dir=...&type=img|video
+This project stores uploaded files into KV as **base64 strings** for compatibility with KV bindings that accept strings.
 
-Notes:
-- To have root path like /random without /api prefix, configure routing in EdgeOne or add a rewrite.
+**Important**
+- Bind your KV namespace to the Functions environment with the binding name `wj`.
+- Binary files are stored under key `file:<id>` as base64 string.
+- Metadata under `meta:<id>` (JSON).
+- Index under `index` (JSON array).
+
+**Tradeoffs**
+- Base64 increases size by ~33%. Watch your KV size limits.
+
