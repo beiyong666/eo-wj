@@ -1,66 +1,65 @@
 
-// --- Password gate (uses window.SITE_CONFIG) ---
-(function(){
+// --- Server-backed password gate ---
+// Flow: on load call /api/check-auth. If not authenticated show overlay.
+// On submit, POST /api/login with JSON { password }. If success, server sets HttpOnly cookie (1 hour).
+(async function(){
   try{
-    const cfg = window.SITE_CONFIG || { PASSWORD_ENABLED:false };
     const overlay = document.getElementById('pwOverlay');
     const pwInput = overlay ? document.getElementById('pwInput') : null;
     const pwSubmit = overlay ? document.getElementById('pwSubmit') : null;
 
-    function isAuthenticated(){
+    async function checkAuth(){
       try{
-        const at = localStorage.getItem('auth_time');
-        if(!at) return false;
-        const ts = Number(at);
-        if(!ts) return false;
-        const now = Date.now();
-        return (now - ts) < (60*60*1000); // 1 hour
+        const res = await fetch('/api/check-auth', { method: 'GET', credentials: 'same-origin' });
+        if(!res.ok) return false;
+        const j = await res.json();
+        return !!j.auth;
       }catch(e){ return false; }
     }
 
-    function requireAuth(){
-      if(!overlay) return;
-      overlay.style.display = 'flex';
-      pwInput && pwInput.focus();
+    function showOverlay(){ if(overlay) overlay.style.display = 'flex'; }
+    function hideOverlay(){ if(overlay) overlay.style.display = 'none'; }
+
+    const authed = await checkAuth();
+    if(!authed){
+      showOverlay();
+    } else {
+      hideOverlay();
     }
 
-    function finishAuth(){
-      if(!overlay) return;
-      localStorage.setItem('auth_time', String(Date.now()));
-      overlay.style.display = 'none';
-    }
-
-    if(cfg.PASSWORD_ENABLED){
-      if(isAuthenticated()){
-        // already ok
-      } else {
-        requireAuth();
-      }
-      if(pwSubmit){
-        pwSubmit.addEventListener('click', () => {
-          const v = pwInput.value || '';
-          if(v === cfg.PASSWORD){
-            finishAuth();
+    if(pwSubmit){
+      pwSubmit.addEventListener('click', async ()=>{
+        const pwd = pwInput.value || '';
+        try{
+          const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pwd }),
+            credentials: 'same-origin'
+          });
+          const j = await res.json();
+          if(res.ok && j.ok){
+            hideOverlay();
           } else {
             alert('密码错误');
             pwInput.value = '';
             pwInput.focus();
           }
-        });
-        // allow Enter key
-        pwInput.addEventListener('keydown', (e) => {
-          if(e.key === 'Enter') pwSubmit.click();
-        });
-      }
-    } else {
-      // ensure overlay hidden if disabled
-      if(overlay) overlay.style.display = 'none';
+        }catch(e){
+          alert('请求失败：' + e.message);
+        }
+      });
+      pwInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter') pwSubmit.click(); });
     }
   }catch(e){
-    console.error('Password gate init error', e);
+    console.error('Server auth init error', e);
   }
 })();
-// --- end password gate ---
+// --- end server-backed password gate ---
+
+
+
+
 
 
 async function api(path, opts){ const res = await fetch(path, opts); if (!res.ok) throw new Error('网络错误 ' + res.status); return res.json(); }
