@@ -3,7 +3,7 @@ export async function onRequest(context) {
   const headers = { 'Access-Control-Allow-Origin': '*' };
   if (request.method === 'OPTIONS') return new Response(null, { status:204, headers });
 
-  const kv = (env && env.wj) ? env.wj : (typeof wj !== 'undefined' ? wj : null);
+  const kv = (env && env.wj) ? env.wj : null;
   if (!kv) return new Response('KV not bound', { status:500, headers });
 
   const url = new URL(request.url);
@@ -22,7 +22,6 @@ export async function onRequest(context) {
     const contentType = meta && meta.contentType ? meta.contentType : 'application/octet-stream';
     const respHeaders = new Headers();
     respHeaders.set('Content-Type', contentType);
-    respHeaders.set('Content-Disposition', 'inline; filename="' + ((meta && meta.name) ? meta.name.replace(/["\\]/g,'') : path.replace(/["\\]/g,'')) + '"');
     respHeaders.set('Access-Control-Allow-Origin','*');
     return new Response(bytes.buffer, { headers: respHeaders });
   } catch(e) {
