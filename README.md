@@ -1,4 +1,10 @@
 # EdgeOne Pages + KV File Storage (kv name: `wj`)
+构建命令:
+框架预设	Other
+根目录	./
+输出目录	public
+编译命令	未设置
+安装命令	未设置
 
 This project stores uploaded files into KV as **base64 strings** for compatibility with KV bindings that accept strings.
 
