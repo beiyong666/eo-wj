@@ -28,38 +28,27 @@ export async function onRequest(context) {
       return new Response(JSON.stringify({ error: 'No file field found in form-data (field name must be "file")' }), { status: 400, headers: jsonHeaders() });
     }
 
-    const id = (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2,8);
-    const filename = file.name || 'unknown';
-    const contentTypeHeader = file.type || 'application/octet-stream';
+    // 新增：获取目录信息
+    const directoryRaw = form.get('directory');
+    // 清理和规范化目录名称，只允许非空字符串
+    const directory = (typeof directoryRaw === 'string' && directoryRaw.trim().length > 0) ? directoryRaw.trim() : undefined;
 
-    let arrayBuffer;
-    try {
-      arrayBuffer = await file.arrayBuffer();
-    } catch (e) {
-      return new Response(JSON.stringify({ error: 'Failed to read uploaded file as arrayBuffer', message: String(e) }), { status: 500, headers: jsonHeaders() });
-    }
+
+    const id = (typeof crypto?.randomUUID === 'function') ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+    
+    // file properties
+    const filename = file.name || 'file';
+    const contentTypeHeader = file.type || 'application/octet-stream';
+    const arrayBuffer = await file.arrayBuffer();
     const uint8 = new Uint8Array(arrayBuffer);
     const size = uint8.byteLength;
 
-    // convert to base64 string to maximize compatibility with KV bindings that expect strings
-    function uint8ToBase64(u8) {
-      const CHUNK = 0x8000;
-      let parts = [];
-      for (let i=0; i<u8.length; i+=CHUNK) {
-        parts.push(String.fromCharCode.apply(null, u8.subarray(i, i+CHUNK)));
-      }
-      return btoa(parts.join(''));
-    }
-    let b64;
-    try {
-      b64 = uint8ToBase64(uint8);
-    } catch (e) {
-      return new Response(JSON.stringify({ error: 'Failed to convert file to base64', message: String(e) }), { status: 500, headers: jsonHeaders() });
-    }
+    // convert to base64 string
+    const base64 = btoa(String.fromCharCode(...uint8));
 
+    // put file content
     try {
-      // store base64 string under file:<id>
-      await kv.put('file:' + id, b64);
+      await kv.put('file:' + id, base64);
     } catch (e) {
       return new Response(JSON.stringify({ error: 'KV put failed (file)', message: String(e) }), { status: 500, headers: jsonHeaders() });
     }
@@ -69,7 +58,8 @@ export async function onRequest(context) {
       filename,
       size,
       contentType: contentTypeHeader,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      directory: directory // <--- 新增字段
     };
 
     try {
@@ -89,7 +79,25 @@ export async function onRequest(context) {
       if (index.length > 1000) index = index.slice(0, 1000);
       await kv.put(indexKey, JSON.stringify(index));
     } catch (e) {
+      // index update failed but file uploaded. Return warning but success.
       return new Response(JSON.stringify({ id, warning: 'uploaded but index update failed', message: String(e) }), { status: 201, headers: jsonHeaders() });
+    }
+    
+    // 新增：更新目录列表
+    if (directory) {
+      try {
+        const dirKey = 'directories';
+        let rawDirs = await kv.get(dirKey);
+        let directories = rawDirs ? JSON.parse(rawDirs) : [];
+        if (!directories.includes(directory)) {
+          directories.push(directory);
+          await kv.put(dirKey, JSON.stringify(directories));
+        }
+      } catch (e) {
+        console.warn('Directory index update failed:', String(e));
+        // 不影响上传结果，只返回警告
+        return new Response(JSON.stringify({ id, warning: 'uploaded but directory index update failed', message: String(e) }), { status: 201, headers: jsonHeaders() });
+      }
     }
 
     const downloadUrl = new URL('/api/download?id=' + id, request.url).toString();
@@ -101,10 +109,5 @@ export async function onRequest(context) {
 }
 
 function jsonHeaders() {
-  return {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,HEAD,POST,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization'
-  };
+  return { 'Content-Type': 'application/json' };
 }
